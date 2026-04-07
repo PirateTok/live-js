@@ -1,4 +1,5 @@
 import { randomUa } from "../http/ua.js";
+import { makeProxyDispatcher } from "../http/proxy.js";
 
 /**
  * Fetches a fresh ttwid cookie via anonymous GET to tiktok.com.
@@ -7,18 +8,23 @@ import { randomUa } from "../http/ua.js";
  * @param timeoutMs  Request timeout in milliseconds (default 10s).
  * @param userAgent  Optional UA override. When omitted, a random UA from the
  *                   built-in pool is used (recommended for DEVICE_BLOCKED rotation).
+ * @param proxy      Optional proxy URL (e.g. "http://host:port").
  */
-export async function fetchTTWID(timeoutMs = 10_000, userAgent?: string): Promise<string> {
+export async function fetchTTWID(timeoutMs = 10_000, userAgent?: string, proxy?: string): Promise<string> {
   const ua = userAgent ?? randomUa();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const resp = await fetch("https://www.tiktok.com/", {
+    const fetchOpts: RequestInit & { dispatcher?: unknown } = {
       headers: { "User-Agent": ua },
       redirect: "manual",
       signal: controller.signal,
-    });
+    };
+    const dispatcher = makeProxyDispatcher(proxy);
+    if (dispatcher) fetchOpts.dispatcher = dispatcher;
+
+    const resp = await fetch("https://www.tiktok.com/", fetchOpts);
 
     const setCookie = resp.headers.getSetCookie?.() ?? [];
     for (const cookie of setCookie) {

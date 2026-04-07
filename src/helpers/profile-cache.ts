@@ -20,15 +20,18 @@ export class ProfileCache {
   private entries = new Map<string, CacheEntry>();
   private ttwid: string | null = null;
   private ttlMs: number;
+  private proxy: string | undefined;
   private userAgent: string | undefined;
   private cookies: string;
 
   constructor(opts: {
     ttlMs?: number;
+    proxy?: string;
     userAgent?: string;
     cookies?: string;
   } = {}) {
     this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
+    this.proxy = opts.proxy;
     this.userAgent = opts.userAgent;
     this.cookies = opts.cookies ?? "";
   }
@@ -51,6 +54,7 @@ export class ProfileCache {
         SCRAPE_TIMEOUT_MS,
         this.userAgent,
         this.cookies,
+        this.proxy,
       );
       this.entries.set(key, { value: profile, insertedAt: Date.now() });
       return profile;
@@ -85,7 +89,7 @@ export class ProfileCache {
 
   private async ensureTtwid(): Promise<string> {
     if (this.ttwid) return this.ttwid;
-    this.ttwid = await fetchTTWID(TTWID_TIMEOUT_MS, this.userAgent);
+    this.ttwid = await fetchTTWID(TTWID_TIMEOUT_MS, this.userAgent, this.proxy);
     return this.ttwid;
   }
 }
