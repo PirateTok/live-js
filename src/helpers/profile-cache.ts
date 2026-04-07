@@ -3,9 +3,9 @@ import {
   ProfileError,
   ProfileNotFoundError,
   ProfilePrivateError,
-} from "./api.js";
-import { scrapeProfile } from "./sigi.js";
-import type { SigiProfile } from "./sigi.js";
+} from "../http/api.js";
+import { scrapeProfile } from "../http/sigi.js";
+import type { SigiProfile } from "../http/sigi.js";
 
 const DEFAULT_TTL_MS = 300_000; // 5 minutes
 const TTWID_TIMEOUT_MS = 10_000;
