@@ -95,6 +95,17 @@ node examples/stream-info.js <username>      # fetch room metadata + stream URLs
 node examples/gift-tracker.js <username>     # track gifts with diamond totals
 ```
 
+## Replay testing
+
+Deterministic cross-lib validation against binary WSS captures. Requires testdata from a separate repo:
+
+```bash
+git clone https://github.com/PirateTok/live-testdata ../live-testdata
+npm test
+```
+
+Tests skip gracefully if testdata is not found. You can also set `PIRATETOK_TESTDATA` to point to a custom location.
+
 ## Known gaps
 
 - Proxy transport support is not wired yet for either `fetch()` or `ws`.

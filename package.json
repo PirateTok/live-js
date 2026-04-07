@@ -17,7 +17,8 @@
     "prebuild": "node discipline/scanner.js",
     "build": "tsc",
     "check": "node discipline/scanner.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test tests/replay_test.mjs"
   },
   "files": [
     "dist",
