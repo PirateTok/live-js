@@ -4,7 +4,7 @@ import { buildHeartbeat, buildEnterRoom, buildAck, decompressIfGzipped } from ".
 import { decode } from "../events/router.js";
 import { TikTokEvent } from "../events/types.js";
 import { DeviceBlockedError } from "../http/api.js";
-import { randomUa } from "../http/ua.js";
+import { randomUa, systemLocale } from "../http/ua.js";
 
 const PushFrame = root.lookupType("WebcastPushFrame");
 const Response = root.lookupType("WebcastResponse");
@@ -22,6 +22,8 @@ export interface WssOptions {
   userAgent?: string;
   /** Extra cookies to append alongside ttwid (e.g. session cookies). */
   cookies?: string;
+  /** Accept-Language header override. Auto-detected from system locale when omitted. */
+  acceptLanguage?: string;
 }
 
 /**
@@ -42,6 +44,11 @@ export function connectWss(
   const cookieHeader = options?.cookies
     ? `ttwid=${ttwid}; ${options.cookies}`
     : `ttwid=${ttwid}`;
+  let acceptLang = options?.acceptLanguage;
+  if (!acceptLang) {
+    const [sl, sr] = systemLocale();
+    acceptLang = `${sl}-${sr},${sl};q=0.9`;
+  }
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wssUrl, {
@@ -50,7 +57,7 @@ export function connectWss(
         Cookie: cookieHeader,
         Origin: "https://www.tiktok.com",
         Referer: "https://www.tiktok.com/",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": acceptLang,
         "Cache-Control": "no-cache",
       },
     });

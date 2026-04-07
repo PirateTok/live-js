@@ -1,4 +1,4 @@
-import { randomUa, systemTimezone } from "./ua.js";
+import { randomUa, systemLocale, systemTimezone } from "./ua.js";
 
 // === Error types ===
 
@@ -106,13 +106,30 @@ async function timedFetch(url: string, headers: Record<string, string>, timeoutM
   }
 }
 
-export async function checkOnline(username: string, timeoutMs = 10_000): Promise<RoomIdResult> {
+export async function checkOnline(
+  username: string,
+  timeoutMs = 10_000,
+  language?: string,
+  region?: string,
+): Promise<RoomIdResult> {
   const clean = username.trim().replace(/^@/, "");
-  const url =
-    "https://www.tiktok.com/api-live/user/room?aid=1988&app_name=tiktok_web" +
-    "&device_platform=web_pc&app_language=en&browser_language=en-US" +
-    "&user_is_login=false&sourceType=54&staleTime=600000" +
-    `&uniqueId=${encodeURIComponent(clean)}`;
+  const [sysLang, sysReg] = systemLocale();
+  const lang = language ?? sysLang;
+  const reg = region ?? sysReg;
+  const browserLang = `${lang}-${reg}`;
+  const params = new URLSearchParams({
+    aid: "1988",
+    app_name: "tiktok_web",
+    device_platform: "web_pc",
+    app_language: lang,
+    browser_language: browserLang,
+    region: reg,
+    user_is_login: "false",
+    sourceType: "54",
+    staleTime: "600000",
+    uniqueId: clean,
+  });
+  const url = `https://www.tiktok.com/api-live/user/room?${params}`;
 
   const resp = await timedFetch(url, { "User-Agent": randomUa() }, timeoutMs);
 
@@ -143,15 +160,35 @@ export async function checkOnline(username: string, timeoutMs = 10_000): Promise
   return { roomId };
 }
 
-export async function fetchRoomInfo(roomId: string, timeoutMs = 10_000, cookies = ""): Promise<RoomInfo> {
+export async function fetchRoomInfo(
+  roomId: string,
+  timeoutMs = 10_000,
+  cookies = "",
+  language?: string,
+  region?: string,
+): Promise<RoomInfo> {
   const tz = encodeURIComponent(systemTimezone());
-  const url =
-    "https://webcast.tiktok.com/webcast/room/info/?aid=1988&app_name=tiktok_web" +
-    "&device_platform=web_pc&app_language=en&browser_language=en-US" +
-    "&browser_name=Mozilla&browser_online=true&browser_platform=Linux+x86_64" +
-    "&cookie_enabled=true&screen_height=1080&screen_width=1920" +
-    `&tz_name=${tz}&webcast_language=en` +
-    `&room_id=${roomId}`;
+  const [sysLang, sysReg] = systemLocale();
+  const lang = language ?? sysLang;
+  const reg = region ?? sysReg;
+  const browserLang = `${lang}-${reg}`;
+  const infoParams = new URLSearchParams({
+    aid: "1988",
+    app_name: "tiktok_web",
+    device_platform: "web_pc",
+    app_language: lang,
+    browser_language: browserLang,
+    browser_name: "Mozilla",
+    browser_online: "true",
+    browser_platform: "Linux x86_64",
+    cookie_enabled: "true",
+    screen_height: "1080",
+    screen_width: "1920",
+    tz_name: systemTimezone(),
+    webcast_language: lang,
+    room_id: roomId,
+  });
+  const url = `https://webcast.tiktok.com/webcast/room/info/?${infoParams}`;
 
   const headers: Record<string, string> = {
     "User-Agent": randomUa(),

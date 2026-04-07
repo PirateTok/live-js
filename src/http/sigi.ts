@@ -4,7 +4,7 @@ import {
   ProfilePrivateError,
   ProfileScrapeError,
 } from "./api.js";
-import { randomUa } from "./ua.js";
+import { randomUa, systemLocale } from "./ua.js";
 
 const SIGI_MARKER = 'id="__UNIVERSAL_DATA_FOR_REHYDRATION__"';
 
@@ -44,11 +44,12 @@ export async function scrapeProfile(
 
   let html: string;
   try {
+    const [sLang, sReg] = systemLocale();
     const resp = await fetch(`https://www.tiktok.com/@${clean}`, {
       headers: {
         "User-Agent": ua,
         Cookie: cookieHeader,
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": `${sLang}-${sReg},${sLang};q=0.9`,
       },
       signal: controller.signal,
     });

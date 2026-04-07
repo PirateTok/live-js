@@ -84,7 +84,11 @@ export class TikTokLiveClient extends EventEmitter {
   }
 
   async connect(): Promise<string> {
-    const room = await checkOnline(this.username, this.timeoutMs);
+    const lang = this._language ?? systemLanguage();
+    const reg = this._region ?? systemRegion();
+    const acceptLang = `${lang}-${reg},${lang};q=0.9`;
+
+    const room = await checkOnline(this.username, this.timeoutMs, lang, reg);
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
@@ -93,8 +97,6 @@ export class TikTokLiveClient extends EventEmitter {
     let attempt = 0;
     while (!signal.aborted) {
       const ttwid = await fetchTTWID(this.timeoutMs, this._userAgent);
-      const lang = this._language ?? systemLanguage();
-      const reg = this._region ?? systemRegion();
       const wssUrl = buildWssUrl(this.cdnHost, room.roomId, lang, reg);
 
       let deviceBlocked = false;
@@ -106,6 +108,7 @@ export class TikTokLiveClient extends EventEmitter {
         }, signal, {
           userAgent: this._userAgent,
           cookies: this._cookies,
+          acceptLanguage: acceptLang,
         });
       } catch (err: unknown) {
         if (err instanceof DeviceBlockedError) {
