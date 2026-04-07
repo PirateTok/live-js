@@ -47,7 +47,7 @@ export async function scrapeProfile(
   let html: string;
   try {
     const [sLang, sReg] = systemLocale();
-    const fetchOpts: RequestInit & { dispatcher?: unknown } = {
+    const fetchOpts: Record<string, unknown> = {
       headers: {
         "User-Agent": ua,
         Cookie: cookieHeader,

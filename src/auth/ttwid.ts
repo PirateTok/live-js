@@ -16,7 +16,7 @@ export async function fetchTTWID(timeoutMs = 10_000, userAgent?: string, proxy?:
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const fetchOpts: RequestInit & { dispatcher?: unknown } = {
+    const fetchOpts: Record<string, unknown> = {
       headers: { "User-Agent": ua },
       redirect: "manual",
       signal: controller.signal,
