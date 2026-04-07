@@ -44,6 +44,34 @@ export class DeviceBlockedError extends Error {
   }
 }
 
+export class ProfilePrivateError extends Error {
+  constructor(public username: string) {
+    super(`profile is private: @${username}`);
+    this.name = "ProfilePrivateError";
+  }
+}
+
+export class ProfileNotFoundError extends Error {
+  constructor(public username: string) {
+    super(`profile not found: @${username}`);
+    this.name = "ProfileNotFoundError";
+  }
+}
+
+export class ProfileScrapeError extends Error {
+  constructor(public reason: string) {
+    super(`failed to scrape profile: ${reason}`);
+    this.name = "ProfileScrapeError";
+  }
+}
+
+export class ProfileError extends Error {
+  constructor(public code: number) {
+    super(`profile fetch error: statusCode=${code}`);
+    this.name = "ProfileError";
+  }
+}
+
 // === Types ===
 
 export interface RoomIdResult {

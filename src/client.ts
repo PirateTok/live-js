@@ -6,6 +6,7 @@ import { connectWss } from "./connection/wss.js";
 import { EventType, TikTokEvent } from "./events/types.js";
 import type { EventTypeName } from "./events/types.js";
 import type { RoomIdResult, RoomInfo } from "./http/api.js";
+import { systemLanguage, systemRegion } from "./http/ua.js";
 
 export class TikTokLiveClient extends EventEmitter {
   private cdnHost = "webcast-ws.tiktok.com";
@@ -14,6 +15,8 @@ export class TikTokLiveClient extends EventEmitter {
   private _staleTimeoutMs = 60_000;
   private _userAgent: string | undefined;
   private _cookies: string | undefined;
+  private _language: string | undefined;
+  private _region: string | undefined;
   private abortController: AbortController | null = null;
 
   constructor(private username: string) {
@@ -70,6 +73,16 @@ export class TikTokLiveClient extends EventEmitter {
     return this;
   }
 
+  language(lang: string): this {
+    this._language = lang;
+    return this;
+  }
+
+  region(reg: string): this {
+    this._region = reg;
+    return this;
+  }
+
   async connect(): Promise<string> {
     const room = await checkOnline(this.username, this.timeoutMs);
     this.abortController = new AbortController();
@@ -80,7 +93,9 @@ export class TikTokLiveClient extends EventEmitter {
     let attempt = 0;
     while (!signal.aborted) {
       const ttwid = await fetchTTWID(this.timeoutMs, this._userAgent);
-      const wssUrl = buildWssUrl(this.cdnHost, room.roomId);
+      const lang = this._language ?? systemLanguage();
+      const reg = this._region ?? systemRegion();
+      const wssUrl = buildWssUrl(this.cdnHost, room.roomId, lang, reg);
 
       let deviceBlocked = false;
       try {

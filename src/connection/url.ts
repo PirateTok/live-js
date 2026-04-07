@@ -2,10 +2,16 @@ import { systemTimezone } from "../http/ua.js";
 
 const DEFAULT_CDN_HOST = "webcast-ws.tiktok.com";
 
-export function buildWssUrl(cdnHost: string, roomId: string): string {
+export function buildWssUrl(
+  cdnHost: string,
+  roomId: string,
+  language = "en",
+  region = "US",
+): string {
   if (!cdnHost) cdnHost = DEFAULT_CDN_HOST;
 
   const lastRtt = (100 + Math.random() * 100).toFixed(3);
+  const browserLanguage = `${language}-${region}`;
 
   const params = new URLSearchParams({
     version_code: "180800",
@@ -13,7 +19,7 @@ export function buildWssUrl(cdnHost: string, roomId: string): string {
     cookie_enabled: "true",
     screen_width: "1920",
     screen_height: "1080",
-    browser_language: "en-US",
+    browser_language: browserLanguage,
     browser_platform: "Linux x86_64",
     browser_name: "Mozilla",
     browser_version: "5.0 (X11)",
@@ -23,11 +29,11 @@ export function buildWssUrl(cdnHost: string, roomId: string): string {
     sup_ws_ds_opt: "1",
     update_version_code: "2.0.0",
     compress: "gzip",
-    webcast_language: "en",
+    webcast_language: language,
     ws_direct: "1",
     aid: "1988",
     live_id: "12",
-    app_language: "en",
+    app_language: language,
     client_enter: "1",
     room_id: roomId,
     identity: "audience",

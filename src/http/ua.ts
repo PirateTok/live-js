@@ -28,3 +28,40 @@ export function systemTimezone(): string {
   }
   return "UTC";
 }
+
+const FALLBACK_LANG = "en";
+const FALLBACK_REGION = "US";
+const SKIP_LOCALES = new Set(["C", "POSIX", ""]);
+
+/**
+ * Detect system locale as `[language, region]`.
+ * Tries `LC_ALL`, then `LANG` env var (Node). Falls back to `["en", "US"]`.
+ */
+export function systemLocale(): [string, string] {
+  if (typeof process !== "undefined" && process.env) {
+    for (const v of ["LC_ALL", "LANG"]) {
+      const val = (process.env[v] ?? "").trim();
+      if (SKIP_LOCALES.has(val)) continue;
+      const parsed = parsePosixLocale(val);
+      if (parsed) return parsed;
+    }
+  }
+  return [FALLBACK_LANG, FALLBACK_REGION];
+}
+
+export function systemLanguage(): string {
+  return systemLocale()[0];
+}
+
+export function systemRegion(): string {
+  return systemLocale()[1];
+}
+
+function parsePosixLocale(s: string): [string, string] | null {
+  const base = s.split(".")[0] as string;
+  const parts = base.replace("-", "_").split("_", 2);
+  const lang = (parts[0] as string).toLowerCase();
+  if (lang.length < 2) return null;
+  const region = parts.length > 1 ? (parts[1] as string).toUpperCase() : FALLBACK_REGION;
+  return [lang, region];
+}

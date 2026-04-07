@@ -10,5 +10,12 @@ export {
   TikTokApiError,
   AgeRestrictedError,
   DeviceBlockedError,
+  ProfilePrivateError,
+  ProfileNotFoundError,
+  ProfileScrapeError,
+  ProfileError,
 } from "./http/api.js";
-export { randomUa, systemTimezone } from "./http/ua.js";
+export { ProfileCache } from "./http/profile-cache.js";
+export { scrapeProfile } from "./http/sigi.js";
+export type { SigiProfile } from "./http/sigi.js";
+export { randomUa, systemTimezone, systemLocale, systemLanguage, systemRegion } from "./http/ua.js";

@@ -1,6 +1,6 @@
 {
   "name": "piratetok-live-js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TikTok Live WebSocket connector — real-time chat, gifts, likes, and viewer events. No authentication required.",
   "author": "Zmole Cristian",
   "license": "0BSD",
@@ -28,16 +28,22 @@
     "type": "git",
     "url": "https://github.com/PirateTok/live-js"
   },
-  "homepage": "https://github.com/PirateTok/live-js",
+  "homepage": "https://piratetok.boats",
+  "funding": "https://piratetok.boats/donate",
   "bugs": {
     "url": "https://github.com/PirateTok/live-js/issues"
   },
   "keywords": [
     "tiktok",
+    "tiktok-live",
     "live",
     "stream",
+    "chat",
+    "gifts",
     "websocket",
     "protobuf",
+    "realtime",
+    "piratetok",
     "events"
   ],
   "dependencies": {
