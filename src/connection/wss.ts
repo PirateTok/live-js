@@ -1,10 +1,12 @@
 import WebSocket from "ws";
+import type { ClientRequestArgs } from "node:http";
 import { root } from "../proto/schema.js";
 import { buildHeartbeat, buildEnterRoom, buildAck, decompressIfGzipped } from "./frames.js";
 import { decode } from "../events/router.js";
 import { TikTokEvent } from "../events/types.js";
 import { DeviceBlockedError } from "../http/api.js";
 import { randomUa, systemLocale } from "../http/ua.js";
+import { makeWssProxyAgent } from "../http/proxy.js";
 
 const PushFrame = root.lookupType("WebcastPushFrame");
 const Response = root.lookupType("WebcastResponse");
@@ -24,6 +26,8 @@ export interface WssOptions {
   cookies?: string;
   /** Accept-Language header override. Auto-detected from system locale when omitted. */
   acceptLanguage?: string;
+  /** Proxy URL for WSS connection (e.g. "http://host:port"). */
+  proxy?: string;
 }
 
 /**
@@ -51,7 +55,7 @@ export function connectWss(
   }
 
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wssUrl, {
+    const wsOpts: WebSocket.ClientOptions & ClientRequestArgs = {
       headers: {
         "User-Agent": ua,
         Cookie: cookieHeader,
@@ -60,7 +64,10 @@ export function connectWss(
         "Accept-Language": acceptLang,
         "Cache-Control": "no-cache",
       },
-    });
+    };
+    const proxyAgent = makeWssProxyAgent(options?.proxy);
+    if (proxyAgent) wsOpts.agent = proxyAgent;
+    const ws = new WebSocket(wssUrl, wsOpts);
 
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     let staleTimer: ReturnType<typeof setTimeout> | null = null;

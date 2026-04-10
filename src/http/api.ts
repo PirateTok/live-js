@@ -1,4 +1,5 @@
 import { randomUa, systemLocale, systemTimezone } from "./ua.js";
+import { makeProxyDispatcher } from "./proxy.js";
 
 // === Error types ===
 
@@ -96,11 +97,14 @@ export interface StreamUrls {
 
 // === API functions ===
 
-async function timedFetch(url: string, headers: Record<string, string>, timeoutMs: number): Promise<Response> {
+async function timedFetch(url: string, headers: Record<string, string>, timeoutMs: number, proxy?: string): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { headers, signal: controller.signal });
+    const opts: Record<string, unknown> = { headers, signal: controller.signal };
+    const dispatcher = makeProxyDispatcher(proxy);
+    if (dispatcher) opts.dispatcher = dispatcher;
+    return await fetch(url, opts);
   } finally {
     clearTimeout(timer);
   }
@@ -111,6 +115,7 @@ export async function checkOnline(
   timeoutMs = 10_000,
   language?: string,
   region?: string,
+  proxy?: string,
 ): Promise<RoomIdResult> {
   const clean = username.trim().replace(/^@/, "");
   const [sysLang, sysReg] = systemLocale();
@@ -131,7 +136,7 @@ export async function checkOnline(
   });
   const url = `https://www.tiktok.com/api-live/user/room?${params}`;
 
-  const resp = await timedFetch(url, { "User-Agent": randomUa() }, timeoutMs);
+  const resp = await timedFetch(url, { "User-Agent": randomUa() }, timeoutMs, proxy);
 
   if (resp.status === 403 || resp.status === 429) {
     throw new TikTokBlockedError(resp.status);
@@ -166,6 +171,7 @@ export async function fetchRoomInfo(
   cookies = "",
   language?: string,
   region?: string,
+  proxy?: string,
 ): Promise<RoomInfo> {
   const tz = encodeURIComponent(systemTimezone());
   const [sysLang, sysReg] = systemLocale();
@@ -196,7 +202,7 @@ export async function fetchRoomInfo(
   };
   if (cookies) headers["Cookie"] = cookies;
 
-  const resp = await timedFetch(url, headers, timeoutMs);
+  const resp = await timedFetch(url, headers, timeoutMs, proxy);
   const body = await resp.json() as Record<string, unknown>;
   const statusCode = body.status_code as number;
 

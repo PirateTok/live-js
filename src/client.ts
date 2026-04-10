@@ -15,6 +15,7 @@ export class TikTokLiveClient extends EventEmitter {
   private _staleTimeoutMs = 60_000;
   private _userAgent: string | undefined;
   private _cookies: string | undefined;
+  private _proxy: string | undefined;
   private _language: string | undefined;
   private _region: string | undefined;
   private abortController: AbortController | null = null;
@@ -73,6 +74,16 @@ export class TikTokLiveClient extends EventEmitter {
     return this;
   }
 
+  /**
+   * Set a proxy URL for all HTTP and WSS connections.
+   * Accepts HTTP, HTTPS, or SOCKS5 proxy URLs (e.g. `"http://host:port"`).
+   * Uses `undici.ProxyAgent` under the hood — requires Node 18+.
+   */
+  proxy(url: string): this {
+    this._proxy = url;
+    return this;
+  }
+
   language(lang: string): this {
     this._language = lang;
     return this;
@@ -88,7 +99,7 @@ export class TikTokLiveClient extends EventEmitter {
     const reg = this._region ?? systemRegion();
     const acceptLang = `${lang}-${reg},${lang};q=0.9`;
 
-    const room = await checkOnline(this.username, this.timeoutMs, lang, reg);
+    const room = await checkOnline(this.username, this.timeoutMs, lang, reg, this._proxy);
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
@@ -96,7 +107,7 @@ export class TikTokLiveClient extends EventEmitter {
 
     let attempt = 0;
     while (!signal.aborted) {
-      const ttwid = await fetchTTWID(this.timeoutMs, this._userAgent);
+      const ttwid = await fetchTTWID(this.timeoutMs, this._userAgent, this._proxy);
       if (signal.aborted) break;
       const wssUrl = buildWssUrl(this.cdnHost, room.roomId, lang, reg);
 
@@ -110,6 +121,7 @@ export class TikTokLiveClient extends EventEmitter {
           userAgent: this._userAgent,
           cookies: this._cookies,
           acceptLanguage: acceptLang,
+          proxy: this._proxy,
         });
       } catch (err: unknown) {
         if (err instanceof DeviceBlockedError) {
