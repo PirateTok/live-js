@@ -16,6 +16,7 @@ export class TikTokLiveClient extends EventEmitter {
   private _userAgent: string | undefined;
   private _cookies: string | undefined;
   private _proxy: string | undefined;
+  private _compress = true;
   private _language: string | undefined;
   private _region: string | undefined;
   private abortController: AbortController | null = null;
@@ -84,6 +85,16 @@ export class TikTokLiveClient extends EventEmitter {
     return this;
   }
 
+  /**
+   * Enable or disable gzip compression on the WSS connection.
+   * When disabled, TikTok sends uncompressed protobuf frames.
+   * Default: `true` (gzip enabled).
+   */
+  compress(enabled: boolean): this {
+    this._compress = enabled;
+    return this;
+  }
+
   language(lang: string): this {
     this._language = lang;
     return this;
@@ -109,7 +120,7 @@ export class TikTokLiveClient extends EventEmitter {
     while (!signal.aborted) {
       const ttwid = await fetchTTWID(this.timeoutMs, this._userAgent, this._proxy);
       if (signal.aborted) break;
-      const wssUrl = buildWssUrl(this.cdnHost, room.roomId, lang, reg);
+      const wssUrl = buildWssUrl(this.cdnHost, room.roomId, lang, reg, this._compress);
 
       let deviceBlocked = false;
       try {

@@ -13,17 +13,17 @@ import { TikTokLiveClient, EventType } from "piratetok-live-js";
 const client = new TikTokLiveClient("username_here");
 
 // Register event handlers before connecting
-client.on(EventType.chat, (evt) => {
-  console.log(`[chat] ${evt.data.user?.nickname}: ${evt.data.content}`);
+client.on(EventType.chat, (data) => {
+  console.log(`[chat] ${data.user?.nickname}: ${data.content}`);
 });
 
-client.on(EventType.gift, (evt) => {
-  const diamonds = evt.data.gift?.diamondCount ?? 0;
-  console.log(`[gift] ${evt.data.user?.nickname} sent ${evt.data.gift?.name} x${evt.data.repeatCount} (${diamonds} diamonds)`);
+client.on(EventType.gift, (data) => {
+  const diamonds = data.gift?.diamondCount ?? 0;
+  console.log(`[gift] ${data.user?.nickname} sent ${data.gift?.name} x${data.repeatCount} (${diamonds} diamonds)`);
 });
 
-client.on(EventType.like, (evt) => {
-  console.log(`[like] ${evt.data.user?.nickname} (${evt.data.totalLikes} total)`);
+client.on(EventType.like, (data) => {
+  console.log(`[like] ${data.user?.nickname} (${data.total} total)`);
 });
 
 // Connect — resolves room ID, opens WSS, starts heartbeat
@@ -68,10 +68,18 @@ Requires Node.js >= 18.
 
 ```typescript
 const client = new TikTokLiveClient("username_here")
-  .cdnEU()
-  .timeout(15_000)
-  .maxRetries(10)
-  .staleTimeout(90_000);
+  .cdnEU()                                        // EU CDN endpoint
+  .cdnUS()                                        // US CDN endpoint
+  .cdn("webcast-ws.custom.tiktok.com")            // custom CDN host
+  .timeout(15_000)                                 // HTTP timeout in ms (default 10000)
+  .maxRetries(10)                                  // reconnect attempts (default 5)
+  .staleTimeout(90_000)                            // reconnect after N ms of silence (default 60000)
+  .proxy("socks5://host:port")                     // proxy URL (HTTP/HTTPS/SOCKS5)
+  .compress(false)                                 // disable gzip compression for WSS payloads (default true)
+  .userAgent("Mozilla/...")                        // override random UA rotation with a fixed user-agent
+  .cookies("sessionid=xxx; sid_tt=xxx")            // session cookies for 18+ room info
+  .language("en")                                  // override detected system language (two-letter code)
+  .region("US");                                   // override detected system region (two-letter code)
 ```
 
 ## Room info (optional, separate call)
@@ -86,6 +94,33 @@ const info = await fetchRoomInfo(roomId);
 const info = await fetchRoomInfo(roomId, 10_000, "sessionid=abc; sid_tt=abc");
 ```
 
+## Helpers
+
+Three stateful helpers for common patterns. Exported from the main package, never imported by the core pipeline.
+
+```typescript
+import { GiftStreakTracker, LikeAccumulator, ProfileCache } from "piratetok-live-js";
+
+// GiftStreakTracker — computes per-event gift deltas from TikTok's running totals
+const tracker = new GiftStreakTracker();
+client.on(EventType.gift, (data) => {
+  const streak = tracker.process(data);
+  // streak.eventGiftCount, streak.totalDiamondCount, streak.isFinal, ...
+});
+
+// LikeAccumulator — monotonizes TikTok's inconsistent total_like_count
+const likes = new LikeAccumulator();
+client.on(EventType.like, (data) => {
+  const stats = likes.process(data);
+  // stats.totalLikeCount (never goes backwards), stats.accumulatedCount
+});
+
+// ProfileCache — TTL-cached profile scraping with ttwid management
+const cache = new ProfileCache({ ttlMs: 300_000, proxy: "socks5://host:port" });
+const profile = await cache.fetch("username_here");
+// profile.uniqueId, profile.nickname, profile.followerCount, ...
+```
+
 ## Examples
 
 ```bash
@@ -93,6 +128,8 @@ node examples/basic-chat.js <username>       # connect + print chat events
 node examples/online-check.js <username>     # check if user is live
 node examples/stream-info.js <username>      # fetch room metadata + stream URLs
 node examples/gift-tracker.js <username>     # track gifts with diamond totals
+node examples/gift-streak.js <username>      # track gift streaks with GiftStreakTracker
+node examples/profile-lookup.js <username>   # scrape profile via ProfileCache
 ```
 
 ## Replay testing
@@ -105,11 +142,6 @@ npm test
 ```
 
 Tests skip gracefully if testdata is not found. You can also set `PIRATETOK_TESTDATA` to point to a custom location.
-
-## Known gaps
-
-- Proxy transport support is not wired yet for either `fetch()` or `ws`.
-- Explicit `DEVICE_BLOCKED` handshake handling is not implemented yet.
 
 ## License
 

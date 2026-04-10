@@ -107,21 +107,21 @@ const EVENT_NAME_MAP = {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function findTestdataPaths(name) {
+function findTestdataPaths(captureName, manifestName) {
   const candidates = [];
 
   const envDir = process.env.PIRATETOK_TESTDATA;
   if (envDir) {
     candidates.push({
-      capture: resolve(envDir, "captures", `${name}.bin`),
-      manifest: resolve(envDir, "manifests", `${name}.json`),
+      capture: resolve(envDir, "captures", `${captureName}.bin`),
+      manifest: resolve(envDir, "manifests", `${manifestName}.json`),
     });
   }
 
   // testdata/ in repo root
   candidates.push({
-    capture: resolve(__dirname, "..", "testdata", "captures", `${name}.bin`),
-    manifest: resolve(__dirname, "..", "testdata", "manifests", `${name}.json`),
+    capture: resolve(__dirname, "..", "testdata", "captures", `${captureName}.bin`),
+    manifest: resolve(__dirname, "..", "testdata", "manifests", `${manifestName}.json`),
   });
 
   for (const c of candidates) {
@@ -430,11 +430,11 @@ function assertReplay(name, r, m) {
 
 // --- test runner ---
 
-function runCaptureTest(name) {
-  const paths = findTestdataPaths(name);
+function runCaptureTestVariant(captureName, manifestName) {
+  const paths = findTestdataPaths(captureName, manifestName);
   if (!paths) {
     console.log(
-      `SKIP ${name}: no testdata (set PIRATETOK_TESTDATA or clone live-testdata)`
+      `SKIP ${captureName}: no testdata (set PIRATETOK_TESTDATA or clone live-testdata)`
     );
     return;
   }
@@ -442,7 +442,15 @@ function runCaptureTest(name) {
   const manifest = JSON.parse(readFileSync(paths.manifest, "utf-8"));
   const frames = readCapture(paths.capture);
   const result = replay(frames);
-  assertReplay(name, result, manifest);
+  assertReplay(captureName, result, manifest);
+}
+
+function runCaptureTest(name) {
+  runCaptureTestVariant(name, name);
+}
+
+function runCaptureTestRaw(name) {
+  runCaptureTestVariant(`${name}_raw`, name);
 }
 
 // --- tests ---
@@ -458,5 +466,19 @@ describe("replay", () => {
 
   it("replay_fox4newsdallasfortworth", () => {
     runCaptureTest("fox4newsdallasfortworth");
+  });
+
+  // Raw (uncompressed) capture variants — same manifests, gzip stripped from payloads
+
+  it("replay_calvinterest6_raw", () => {
+    runCaptureTestRaw("calvinterest6");
+  });
+
+  it("replay_happyhappygaltv_raw", () => {
+    runCaptureTestRaw("happyhappygaltv");
+  });
+
+  it("replay_fox4newsdallasfortworth_raw", () => {
+    runCaptureTestRaw("fox4newsdallasfortworth");
   });
 });

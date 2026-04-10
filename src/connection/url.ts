@@ -7,6 +7,7 @@ export function buildWssUrl(
   roomId: string,
   language = "en",
   region = "US",
+  compress = true,
 ): string {
   if (!cdnHost) cdnHost = DEFAULT_CDN_HOST;
 
@@ -28,7 +29,7 @@ export function buildWssUrl(
     app_name: "tiktok_web",
     sup_ws_ds_opt: "1",
     update_version_code: "2.0.0",
-    compress: "gzip",
+    compress: compress ? "gzip" : "",
     webcast_language: language,
     ws_direct: "1",
     aid: "1988",
