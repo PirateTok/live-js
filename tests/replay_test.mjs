@@ -118,15 +118,10 @@ function findTestdataPaths(name) {
     });
   }
 
+  // testdata/ in repo root
   candidates.push({
-    capture: resolve(__dirname, "..", "..", "live-testdata", "captures", `${name}.bin`),
-    manifest: resolve(__dirname, "..", "..", "live-testdata", "manifests", `${name}.json`),
-  });
-
-  // Dev fallback: live-rs captures
-  candidates.push({
-    capture: resolve(__dirname, "..", "..", "live-rs", "captures", `${name}.bin`),
-    manifest: resolve(__dirname, "..", "..", "live-rs", "captures", "manifests", `${name}.json`),
+    capture: resolve(__dirname, "..", "testdata", "captures", `${name}.bin`),
+    manifest: resolve(__dirname, "..", "testdata", "manifests", `${name}.json`),
   });
 
   for (const c of candidates) {
