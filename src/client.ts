@@ -97,6 +97,7 @@ export class TikTokLiveClient extends EventEmitter {
     let attempt = 0;
     while (!signal.aborted) {
       const ttwid = await fetchTTWID(this.timeoutMs, this._userAgent);
+      if (signal.aborted) break;
       const wssUrl = buildWssUrl(this.cdnHost, room.roomId, lang, reg);
 
       let deviceBlocked = false;

@@ -69,7 +69,13 @@ export function connectWss(
       if (staleTimer) clearTimeout(staleTimer);
       staleTimer = setTimeout(() => {
         cleanup();
+        done();
       }, staleMs);
+    }
+
+    let resolved = false;
+    function done(): void {
+      if (!resolved) { resolved = true; resolve(); }
     }
 
     function cleanup(): void {
@@ -78,11 +84,11 @@ export function connectWss(
       if (staleTimer) clearTimeout(staleTimer);
       staleTimer = null;
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
+        ws.terminate();
       }
     }
 
-    signal.addEventListener("abort", cleanup, { once: true });
+    signal.addEventListener("abort", () => { cleanup(); done(); }, { once: true });
 
     // Detect DEVICE_BLOCKED on failed WebSocket upgrade (non-101 HTTP response).
     // The `ws` library emits "unexpected-response" before "error" for HTTP rejections.
@@ -125,14 +131,13 @@ export function connectWss(
 
     ws.on("close", () => {
       cleanup();
-      // No disconnect emit — client owns lifecycle
-      resolve();
+      done();
     });
 
     ws.on("error", (err) => {
       cleanup();
-      callbacks.onError(err);
-      resolve();
+      if (!signal.aborted) callbacks.onError(err);
+      done();
     });
   });
 }

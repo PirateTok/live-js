@@ -18,7 +18,11 @@
     "build": "tsc",
     "check": "node discipline/scanner.js",
     "prepublishOnly": "npm run build",
-    "test": "npm run build && node --test tests/replay_test.mjs"
+    "test": "npm run build && node --test tests/replay_test.mjs tests/disconnect_test.mjs",
+    "test:integration": "npm run build && node --test tests/api_integration_test.mjs",
+    "test:wss": "npm run build && node --test tests/wss_smoke_test.mjs",
+    "test:load": "npm run build && node --test tests/multi_stream_load_test.mjs",
+    "test:all": "npm run build && node --test tests/replay_test.mjs tests/disconnect_test.mjs tests/api_integration_test.mjs tests/wss_smoke_test.mjs tests/multi_stream_load_test.mjs"
   },
   "files": [
     "dist",
