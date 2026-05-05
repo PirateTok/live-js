@@ -1,6 +1,6 @@
 {
   "name": "piratetok-live-js",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "TikTok Live WebSocket connector — real-time chat, gifts, likes, and viewer events. No authentication required.",
   "author": "Zmole Cristian",
   "license": "0BSD",
