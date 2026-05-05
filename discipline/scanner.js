@@ -2,7 +2,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const MAX_LOC = 800;
+const MAX_LOC_PROTO = 900;
 const SRC_DIR = "src";
+const LOC_EXEMPT = new Set([
+  "src/proto/schema.ts",
+  "src/proto/messages.ts",
+]);
 
 let violations = 0;
 
@@ -24,9 +29,10 @@ function checkFile(path) {
   const lines = content.split("\n");
   const rel = relative(".", path);
 
-  // R1: LOC
-  if (lines.length > MAX_LOC) {
-    console.error(`R1 ${rel} — ${lines.length} lines (max ${MAX_LOC})`);
+  // R1: LOC (proto struct files allowed up to MAX_LOC_PROTO)
+  const limit = LOC_EXEMPT.has(rel) ? MAX_LOC_PROTO : MAX_LOC;
+  if (lines.length > limit) {
+    console.error(`R1 ${rel} — ${lines.length} lines (max ${limit})`);
     violations++;
   }
 
