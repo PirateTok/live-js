@@ -26,9 +26,14 @@ client.on(EventType.like, (data) => {
   console.log(`[like] ${data.user?.nickname} (${data.total} total)`);
 });
 
-// Connect — resolves room ID, opens WSS, starts heartbeat
-await client.connect();
+// Connect — resolves with the room ID once the WSS handshake succeeds.
+// Events keep flowing (and auto-reconnect) until client.disconnect().
+const roomId = await client.connect();
 ```
+
+`connect()` rejects if the user isn't live or if no WSS handshake ever succeeds. After it
+resolves, the reconnect loop runs in the background: `reconnecting` fires before each retry,
+`disconnected` once it gives up or you call `disconnect()`.
 
 ## Install
 
@@ -36,7 +41,7 @@ await client.connect();
 npm install piratetok-live-js
 ```
 
-Requires Node.js >= 18.
+Requires Node.js >= 22.19.
 
 ## Other languages
 
@@ -58,11 +63,13 @@ Requires Node.js >= 18.
 
 - **Zero signing dependency** — no API keys, no signing server, no external auth
 - **64 decoded event types** — programmatic protobufjs schemas, no `.proto` files
-- **Auto-reconnection** — stale detection, exponential backoff, self-healing auth
+- **Auto-reconnection** — stale detection, exponential backoff, ttwid retry + reuse, rotation on DEVICE_BLOCKED, retry budget resets after a healthy (30 s+) session
 - **Enriched User data** — badges, gifter level, moderator status, follow info, fan club
 - **Sub-routed convenience events** — `follow`, `share`, `join`, `liveEnded`
 - **ESM + TypeScript** — full type definitions included
-- **2 runtime deps** — `protobufjs` + `ws`
+- **Gift helpers** — `isCombo`, `isStreakOver`, `diamondTotal` on every gift event
+- **Proxy** — HTTP/HTTPS/SOCKS5 for both HTTP calls and the WSS
+- **Runtime deps** — `protobufjs`, `ws`, plus `undici` / `https-proxy-agent` / `socks-proxy-agent` for proxying
 
 ## Configuration
 
@@ -72,8 +79,9 @@ const client = new TikTokLiveClient("username_here")
   .cdnUS()                                        // US CDN endpoint
   .cdn("webcast-ws.custom.tiktok.com")            // custom CDN host
   .timeout(15_000)                                 // HTTP timeout in ms (default 10000)
-  .maxRetries(10)                                  // reconnect attempts (default 5)
+  .maxRetries(10)                                  // consecutive failed reconnects before giving up (default 5)
   .staleTimeout(90_000)                            // reconnect after N ms of silence (default 60000)
+  .heartbeatInterval(10_000)                       // WSS heartbeat in ms (default 10000)
   .proxy("socks5://host:port")                     // proxy URL (HTTP/HTTPS/SOCKS5)
   .compress(false)                                 // disable gzip compression for WSS payloads (default true)
   .userAgent("Mozilla/...")                        // override random UA rotation with a fixed user-agent
@@ -93,6 +101,31 @@ const info = await fetchRoomInfo(roomId);
 // 18+ rooms
 const info = await fetchRoomInfo(roomId, 10_000, "sessionid=abc; sid_tt=abc");
 ```
+
+## Viewers
+
+The top-viewers box (usually top 3) rides the WSS feed — no cookies:
+
+```typescript
+import { topViewers } from "piratetok-live-js";
+
+client.on(EventType.roomUserSeq, (data) => {
+  for (const c of topViewers(data)) console.log(c.rank, c.user?.nickname, c.score);
+});
+```
+
+The full roster (the web viewer panel) is a separate HTTP call. **TikTok requires session
+cookies for this one call** — without them it throws `SessionRequiredError`:
+
+```typescript
+import { checkOnline, fetchRoomAudience } from "piratetok-live-js";
+
+const { roomId, anchorId } = await checkOnline("username_here");
+const audience = await fetchRoomAudience(roomId, anchorId, "sessionid=abc; sid_tt=abc");
+// audience.total, audience.anonymous, audience.viewers[].{rank, username, nickname, ...}
+```
+
+Pass `undefined` as `anchorId` to resolve it from room info (one extra request).
 
 ## Helpers
 
@@ -130,18 +163,21 @@ node examples/stream-info.js <username>      # fetch room metadata + stream URLs
 node examples/gift-tracker.js <username>     # track gifts with diamond totals
 node examples/gift-streak.js <username>      # track gift streaks with GiftStreakTracker
 node examples/profile-lookup.js <username>   # scrape profile via ProfileCache
+node examples/audience.js <username> <cookies>  # full viewer roster (needs session cookies)
 ```
 
 ## Replay testing
 
-Deterministic cross-lib validation against binary WSS captures. Requires testdata from a separate repo:
+Deterministic cross-lib validation against binary WSS captures. `npm test` reads them from
+`testdata/` (gitignored, `captures/*.bin` + `manifests/*.json`) or from a
+[live-testdata](https://github.com/PirateTok/live-testdata) checkout:
 
 ```bash
-git clone https://github.com/PirateTok/live-testdata testdata
-npm test
+git clone https://github.com/PirateTok/live-testdata ../live-testdata
+PIRATETOK_TESTDATA=../live-testdata npm test
 ```
 
-Tests skip gracefully if testdata is not found. You can also set `PIRATETOK_TESTDATA` to point to a custom location.
+Missing testdata fails the replay tests — they never pass vacuously.
 
 ## License
 

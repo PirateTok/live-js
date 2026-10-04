@@ -2,6 +2,7 @@ import { root } from "../proto/schema.js";
 import "../proto/messages.js"; // side-effect: registers all types
 import { EventType, TikTokEvent } from "./types.js";
 import type { EventTypeName } from "./types.js";
+import { diamondTotal, isComboGift, isStreakOver } from "./gift.js";
 
 type ProtoMessage = { toJSON(): Record<string, unknown> };
 
@@ -93,6 +94,11 @@ export function decode(method: string, payload: Uint8Array): TikTokEvent[] {
   }
 
   const data = decoded.toJSON();
+  if (method === "WebcastGiftMessage") {
+    data.isCombo = isComboGift(data);
+    data.isStreakOver = isStreakOver(data);
+    data.diamondTotal = diamondTotal(data);
+  }
   const events: TikTokEvent[] = [{ type: eventName, data }];
 
   // Sub-routing

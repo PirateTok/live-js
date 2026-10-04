@@ -1,18 +1,21 @@
 import { EventEmitter } from "node:events";
 import { fetchTTWID } from "./auth/ttwid.js";
-import { checkOnline, fetchRoomInfo, DeviceBlockedError } from "./http/api.js";
+import { checkOnline, fetchRoomInfo } from "./http/api.js";
 import { buildWssUrl } from "./connection/url.js";
-import { connectWss } from "./connection/wss.js";
+import { connectWss, DEFAULT_HEARTBEAT_MS } from "./connection/wss.js";
+import { abortableSleep, superviseSessions } from "./connection/supervisor.js";
+import type { SupervisorDeps } from "./connection/supervisor.js";
 import { EventType, TikTokEvent } from "./events/types.js";
 import type { EventTypeName } from "./events/types.js";
 import type { RoomIdResult, RoomInfo } from "./http/api.js";
-import { systemLanguage, systemRegion } from "./http/ua.js";
+import { randomUa, systemLanguage, systemRegion } from "./http/ua.js";
 
 export class TikTokLiveClient extends EventEmitter {
   private cdnHost = "webcast-ws.tiktok.com";
   private timeoutMs = 10_000;
   private _maxRetries = 5;
   private _staleTimeoutMs = 60_000;
+  private _heartbeatMs = DEFAULT_HEARTBEAT_MS;
   private _userAgent: string | undefined;
   private _cookies: string | undefined;
   private _proxy: string | undefined;
@@ -77,8 +80,8 @@ export class TikTokLiveClient extends EventEmitter {
 
   /**
    * Set a proxy URL for all HTTP and WSS connections.
-   * Accepts HTTP, HTTPS, or SOCKS5 proxy URLs (e.g. `"http://host:port"`).
-   * Uses `undici.ProxyAgent` under the hood — requires Node 18+.
+   * Accepts HTTP, HTTPS, or SOCKS5 proxy URLs (e.g. `"http://host:port"`,
+   * `"socks5://host:port"`); any other scheme throws.
    */
   proxy(url: string): this {
     this._proxy = url;
@@ -105,66 +108,98 @@ export class TikTokLiveClient extends EventEmitter {
     return this;
   }
 
+  /**
+   * WSS heartbeat interval in ms (default 10 000). Also sent to TikTok as the
+   * `heartbeat_duration` URL param.
+   */
+  heartbeatInterval(ms: number): this {
+    this._heartbeatMs = ms;
+    return this;
+  }
+
+  /**
+   * Resolve the room, open the WSS and start streaming events.
+   *
+   * Resolves with the room ID once the first WSS handshake succeeds; the
+   * reconnect loop keeps running in the background until `disconnect()` or
+   * the retry budget is spent (then `disconnected` fires). Rejects if the
+   * user is not live, or if the loop gives up before any handshake succeeded.
+   */
   async connect(): Promise<string> {
     const lang = this._language ?? systemLanguage();
     const reg = this._region ?? systemRegion();
     const acceptLang = `${lang}-${reg},${lang};q=0.9`;
 
-    const room = await checkOnline(this.username, this.timeoutMs, lang, reg, this._proxy);
-    this.abortController = new AbortController();
-    const signal = this.abortController.signal;
-
-    this.emit(EventType.connected, { roomId: room.roomId });
-
-    let attempt = 0;
-    while (!signal.aborted) {
-      const ttwid = await fetchTTWID(this.timeoutMs, this._userAgent, this._proxy);
-      if (signal.aborted) break;
-      const wssUrl = buildWssUrl(this.cdnHost, room.roomId, lang, reg, this._compress);
-
-      let deviceBlocked = false;
-      try {
-        await connectWss(wssUrl, ttwid, room.roomId, {
+    const { roomId } = await checkOnline(this.username, this.timeoutMs, lang, reg, this._proxy);
+    return this.runSessions(roomId, (signal) => ({
+      newSession: async () => {
+        const userAgent = this._userAgent ?? randomUa();
+        const ttwid = await fetchTTWID(this.timeoutMs, userAgent, this._proxy);
+        return { ttwid, userAgent };
+      },
+      runSession: (session, onOpen) => connectWss(
+        buildWssUrl(this.cdnHost, roomId, lang, reg, this._compress, this._heartbeatMs),
+        session.ttwid,
+        roomId,
+        {
           onEvent: (evt: TikTokEvent) => this.emit(evt.type, evt.data),
-          onError: (err: Error) => this.emit("error", err),
+          onError: (err: Error) => this.emitError(err),
+          onOpen,
           staleTimeoutMs: this._staleTimeoutMs,
-        }, signal, {
-          userAgent: this._userAgent,
+        },
+        signal,
+        {
+          userAgent: session.userAgent,
           cookies: this._cookies,
           acceptLanguage: acceptLang,
           proxy: this._proxy,
-        });
-      } catch (err: unknown) {
-        if (err instanceof DeviceBlockedError) {
-          deviceBlocked = true;
-        } else {
-          this.emit("error", err instanceof Error ? err : new Error(String(err)));
+          heartbeatMs: this._heartbeatMs,
+        },
+      ),
+      sleep: abortableSleep,
+      now: () => Date.now(),
+    }));
+  }
+
+  /** Event + promise wiring around the reconnect loop; `connect()` passes the live transport. */
+  private runSessions(roomId: string, makeDeps: (signal: AbortSignal) => SupervisorDeps): Promise<string> {
+    const controller = new AbortController();
+    this.abortController = controller;
+    const deps = makeDeps(controller.signal);
+
+    this.emit(EventType.connected, { roomId });
+
+    return new Promise<string>((resolve, reject) => {
+      let opened = false;
+      let lastError: Error | null = null;
+      const finish = (err: Error | null): void => {
+        if (this.abortController === controller) this.abortController = null;
+        this.emit(EventType.disconnected, null);
+        if (!opened) {
+          reject(err ?? lastError ?? new Error("disconnected before the WSS handshake completed"));
+        } else if (err) {
+          this.emitError(err);
         }
-      }
+      };
 
-      if (signal.aborted) break;
+      superviseSessions(deps, this._maxRetries, controller.signal, {
+        onOpen: () => {
+          if (opened) return;
+          opened = true;
+          resolve(roomId);
+        },
+        onReconnecting: (info) => this.emit(EventType.reconnecting, info),
+        onError: (err) => {
+          lastError = err;
+          this.emitError(err);
+        },
+      }).then(() => finish(null), (err: unknown) => finish(err instanceof Error ? err : new Error(String(err))));
+    });
+  }
 
-      attempt++;
-      if (attempt > this._maxRetries) break;
-
-      // On DEVICE_BLOCKED: short 2s delay since we're getting a fresh
-      // ttwid + UA anyway. On other errors: exponential backoff.
-      const delay = deviceBlocked
-        ? 2_000
-        : Math.min(1 << attempt, 30) * 1000;
-      this.emit(EventType.reconnecting, {
-        attempt, maxRetries: this._maxRetries, delayMs: delay,
-        deviceBlocked,
-      });
-
-      await new Promise<void>((r) => {
-        const timer = setTimeout(r, delay);
-        signal.addEventListener("abort", () => { clearTimeout(timer); r(); }, { once: true });
-      });
-    }
-
-    this.emit(EventType.disconnected, null);
-    return room.roomId;
+  /** `error` is only emitted when someone listens — an unheard `error` would crash the loop. */
+  private emitError(err: Error): void {
+    if (this.listenerCount("error") > 0) this.emit("error", err);
   }
 
   disconnect(): void {

@@ -1,6 +1,6 @@
 {
   "name": "piratetok-live-js",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TikTok Live WebSocket connector — real-time chat, gifts, likes, and viewer events. No authentication required.",
   "author": "Zmole Cristian",
   "license": "0BSD",
@@ -18,7 +18,7 @@
     "build": "tsc",
     "check": "node discipline/scanner.js",
     "prepublishOnly": "npm run build",
-    "test": "npm run build && node --test tests/replay_test.mjs tests/disconnect_test.mjs",
+    "test": "npm run build && node --test tests/replay_test.mjs tests/disconnect_test.mjs tests/ttwid_test.mjs tests/supervisor_test.mjs tests/wss_local_test.mjs tests/audience_test.mjs tests/events_test.mjs tests/proxy_test.mjs tests/api_parse_test.mjs tests/client_profile_test.mjs",
     "test:integration": "npm run build && node --test tests/api_integration_test.mjs",
     "test:wss": "npm run build && node --test tests/wss_smoke_test.mjs",
     "test:load": "npm run build && node --test tests/multi_stream_load_test.mjs",
@@ -33,8 +33,8 @@
     "type": "git",
     "url": "https://github.com/PirateTok/live-js"
   },
-  "homepage": "https://piratetok.boats",
-  "funding": "https://piratetok.boats/donate",
+  "homepage": "https://piratetok.rosint.org",
+  "funding": "https://piratetok.rosint.org/donate.html",
   "bugs": {
     "url": "https://github.com/PirateTok/live-js/issues"
   },
@@ -52,7 +52,10 @@
     "events"
   ],
   "dependencies": {
+    "https-proxy-agent": "^9.1.0",
     "protobufjs": "^7.4.0",
+    "socks-proxy-agent": "^10.1.0",
+    "undici": "^8.11.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -61,6 +64,6 @@
     "typescript": "^5.6.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.19.0"
   }
 }

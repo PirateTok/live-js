@@ -1,5 +1,5 @@
 import { randomUa, systemLocale, systemTimezone } from "./ua.js";
-import { makeProxyDispatcher } from "./proxy.js";
+import { proxyFetch } from "./proxy.js";
 
 // === Error types ===
 
@@ -45,6 +45,20 @@ export class DeviceBlockedError extends Error {
   }
 }
 
+export class SessionRequiredError extends Error {
+  constructor(public reason: string) {
+    super(`session required: ${reason}`);
+    this.name = "SessionRequiredError";
+  }
+}
+
+export class InvalidResponseError extends Error {
+  constructor(public reason: string) {
+    super(`invalid response: ${reason}`);
+    this.name = "InvalidResponseError";
+  }
+}
+
 export class ProfilePrivateError extends Error {
   constructor(public username: string) {
     super(`profile is private: @${username}`);
@@ -77,6 +91,8 @@ export class ProfileError extends Error {
 
 export interface RoomIdResult {
   roomId: string;
+  /** Streamer's user ID (`data.user.id`); empty when TikTok omits it. Feeds `fetchRoomAudience()`. */
+  anchorId: string;
 }
 
 export interface RoomInfo {
@@ -97,14 +113,11 @@ export interface StreamUrls {
 
 // === API functions ===
 
-async function timedFetch(url: string, headers: Record<string, string>, timeoutMs: number, proxy?: string): Promise<Response> {
+export async function timedFetch(url: string, headers: Record<string, string>, timeoutMs: number, proxy?: string): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const opts: Record<string, unknown> = { headers, signal: controller.signal };
-    const dispatcher = makeProxyDispatcher(proxy);
-    if (dispatcher) opts.dispatcher = dispatcher;
-    return await fetch(url, opts);
+    return await proxyFetch(url, { headers, signal: controller.signal }, proxy);
   } finally {
     clearTimeout(timer);
   }
@@ -137,17 +150,20 @@ export async function checkOnline(
   const url = `https://www.tiktok.com/api-live/user/room?${params}`;
 
   const resp = await timedFetch(url, { "User-Agent": randomUa() }, timeoutMs, proxy);
+  return parseCheckOnline(await resp.text(), resp.status, clean);
+}
 
-  if (resp.status === 403 || resp.status === 429) {
-    throw new TikTokBlockedError(resp.status);
+/** Map an `/api-live/user/room` response. Exported for offline tests. */
+export function parseCheckOnline(body: string, httpStatus: number, clean: string): RoomIdResult {
+  if (httpStatus === 403 || httpStatus === 429) {
+    throw new TikTokBlockedError(httpStatus);
   }
 
-  const body = await resp.text();
   let result: Record<string, unknown>;
   try {
     result = JSON.parse(body);
   } catch {
-    throw new TikTokBlockedError(resp.status);
+    throw new TikTokBlockedError(httpStatus);
   }
 
   const statusCode = result.statusCode as number;
@@ -162,7 +178,7 @@ export async function checkOnline(
   const userStatus = (data?.user?.status as number) ?? 0;
   if (liveStatus !== 2 && userStatus !== 2) throw new HostNotOnlineError(clean);
 
-  return { roomId };
+  return { roomId, anchorId: String(data?.user?.id ?? "") };
 }
 
 export async function fetchRoomInfo(
@@ -173,6 +189,32 @@ export async function fetchRoomInfo(
   region?: string,
   proxy?: string,
 ): Promise<RoomInfo> {
+  return roomInfoFromJson(await fetchRoomInfoJson(roomId, timeoutMs, cookies, language, region, proxy));
+}
+
+/** Map a successful `/webcast/room/info/` JSON body. Exported for offline tests. */
+export function roomInfoFromJson(body: Record<string, unknown>): RoomInfo {
+  const data = body.data as Record<string, unknown>;
+  const stats = (data?.stats ?? {}) as Record<string, unknown>;
+
+  return {
+    title: String(data?.title ?? ""),
+    viewers: Number(data?.user_count ?? 0),
+    likes: Number(stats?.like_count ?? 0),
+    totalUser: Number(stats?.total_user ?? 0),
+    streamUrl: parseStreamUrls(data?.stream_url),
+  };
+}
+
+/** Raw `/webcast/room/info/` JSON after status_code mapping. */
+export async function fetchRoomInfoJson(
+  roomId: string,
+  timeoutMs = 10_000,
+  cookies = "",
+  language?: string,
+  region?: string,
+  proxy?: string,
+): Promise<Record<string, unknown>> {
   const tz = encodeURIComponent(systemTimezone());
   const [sysLang, sysReg] = systemLocale();
   const lang = language ?? sysLang;
@@ -203,22 +245,15 @@ export async function fetchRoomInfo(
   if (cookies) headers["Cookie"] = cookies;
 
   const resp = await timedFetch(url, headers, timeoutMs, proxy);
-  const body = await resp.json() as Record<string, unknown>;
-  const statusCode = body.status_code as number;
+  return checkRoomInfoStatus(await resp.json() as Record<string, unknown>);
+}
 
+/** status_code mapping of `/webcast/room/info/`. Exported for offline tests. */
+export function checkRoomInfoStatus(body: Record<string, unknown>): Record<string, unknown> {
+  const statusCode = body.status_code as number;
   if (statusCode === 4003110) throw new AgeRestrictedError();
   if (statusCode !== 0) throw new TikTokApiError(statusCode);
-
-  const data = body.data as Record<string, unknown>;
-  const stats = (data?.stats ?? {}) as Record<string, unknown>;
-
-  return {
-    title: String(data?.title ?? ""),
-    viewers: Number(data?.user_count ?? 0),
-    likes: Number(stats?.like_count ?? 0),
-    totalUser: Number(stats?.total_user ?? 0),
-    streamUrl: parseStreamUrls(data?.stream_url),
-  };
+  return body;
 }
 
 function parseStreamUrls(raw: unknown): StreamUrls | null {

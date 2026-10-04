@@ -4,10 +4,11 @@ import {
   ProfilePrivateError,
   ProfileScrapeError,
 } from "./api.js";
-import { makeProxyDispatcher } from "./proxy.js";
+import { proxyFetch } from "./proxy.js";
 import { randomUa, systemLocale } from "./ua.js";
 
 const SIGI_MARKER = 'id="__UNIVERSAL_DATA_FOR_REHYDRATION__"';
+export const TIKTOK_BASE_URL = "https://www.tiktok.com";
 
 export interface SigiProfile {
   userId: string;
@@ -36,6 +37,7 @@ export async function scrapeProfile(
   userAgent?: string,
   cookies = "",
   proxy?: string,
+  baseUrl = TIKTOK_BASE_URL,
 ): Promise<SigiProfile> {
   const clean = username.trim().replace(/^@/, "").toLowerCase();
   const ua = userAgent ?? randomUa();
@@ -47,18 +49,14 @@ export async function scrapeProfile(
   let html: string;
   try {
     const [sLang, sReg] = systemLocale();
-    const fetchOpts: Record<string, unknown> = {
+    const resp = await proxyFetch(`${baseUrl}/@${clean}`, {
       headers: {
         "User-Agent": ua,
         Cookie: cookieHeader,
         "Accept-Language": `${sLang}-${sReg},${sLang};q=0.9`,
       },
       signal: controller.signal,
-    };
-    const dispatcher = makeProxyDispatcher(proxy);
-    if (dispatcher) fetchOpts.dispatcher = dispatcher;
-
-    const resp = await fetch(`https://www.tiktok.com/@${clean}`, fetchOpts);
+    }, proxy);
     html = await resp.text();
   } finally {
     clearTimeout(timer);

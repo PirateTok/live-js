@@ -11,11 +11,14 @@ import { makeWssProxyAgent } from "../http/proxy.js";
 const PushFrame = root.lookupType("WebcastPushFrame");
 const Response = root.lookupType("WebcastResponse");
 
-const HEARTBEAT_MS = 10_000;
+export const DEFAULT_HEARTBEAT_MS = 10_000;
 
 export interface WssCallbacks {
   onEvent: (event: TikTokEvent) => void;
+  /** Non-fatal errors while streaming (frame decode failures). */
   onError: (error: Error) => void;
+  /** Called once the WSS handshake succeeded. */
+  onOpen?: () => void;
   staleTimeoutMs?: number;
 }
 
@@ -28,12 +31,15 @@ export interface WssOptions {
   acceptLanguage?: string;
   /** Proxy URL for WSS connection (e.g. "http://host:port"). */
   proxy?: string;
+  /** Heartbeat interval in ms (default 10 000). */
+  heartbeatMs?: number;
 }
 
 /**
  * Opens a single WSS connection and streams events.
- * Resolves when the connection closes (stale, server close, abort, or error).
- * Throws `DeviceBlockedError` if the handshake returns DEVICE_BLOCKED.
+ * Resolves when the connection closes (stale, server close, or abort).
+ * Rejects with `DeviceBlockedError` if the handshake returns DEVICE_BLOCKED,
+ * or with the underlying error on handshake rejection / socket error.
  */
 export function connectWss(
   wssUrl: string,
@@ -44,6 +50,7 @@ export function connectWss(
   options?: WssOptions,
 ): Promise<void> {
   const staleMs = callbacks.staleTimeoutMs ?? 60_000;
+  const heartbeatMs = options?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
   const ua = options?.userAgent ?? randomUa();
   const cookieHeader = options?.cookies
     ? `ttwid=${ttwid}; ${options.cookies}`
@@ -74,15 +81,17 @@ export function connectWss(
 
     function resetStale(): void {
       if (staleTimer) clearTimeout(staleTimer);
-      staleTimer = setTimeout(() => {
-        cleanup();
-        done();
-      }, staleMs);
+      staleTimer = setTimeout(() => finish(), staleMs);
     }
 
-    let resolved = false;
-    function done(): void {
-      if (!resolved) { resolved = true; resolve(); }
+    let settled = false;
+    function finish(err?: Error): void {
+      cleanup();
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      if (err) reject(err);
+      else resolve();
     }
 
     function cleanup(): void {
@@ -95,23 +104,21 @@ export function connectWss(
       }
     }
 
-    signal.addEventListener("abort", () => { cleanup(); done(); }, { once: true });
+    const onAbort = (): void => finish();
+    signal.addEventListener("abort", onAbort, { once: true });
 
     // Detect DEVICE_BLOCKED on failed WebSocket upgrade (non-101 HTTP response).
     // The `ws` library emits "unexpected-response" before "error" for HTTP rejections.
     ws.on("unexpected-response", (_req, res) => {
       const handshakeMsg = res.headers["handshake-msg"] ?? "";
-      cleanup();
-      if (handshakeMsg === "DEVICE_BLOCKED") {
-        reject(new DeviceBlockedError());
-      } else {
-        reject(new Error(
+      res.resume(); // drain response to free socket
+      finish(handshakeMsg === "DEVICE_BLOCKED"
+        ? new DeviceBlockedError()
+        : new Error(
           `WSS handshake rejected: HTTP ${res.statusCode}` +
           ` handshake-msg=${handshakeMsg}` +
           ` handshake-status=${res.headers["handshake-status"] ?? "?"}`,
         ));
-      }
-      res.resume(); // drain response to free socket
     });
 
     ws.on("open", () => {
@@ -122,9 +129,10 @@ export function connectWss(
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(buildHeartbeat(roomId));
         }
-      }, HEARTBEAT_MS);
+      }, heartbeatMs);
 
       resetStale();
+      callbacks.onOpen?.();
     });
 
     ws.on("message", (raw: Buffer) => {
@@ -136,16 +144,9 @@ export function connectWss(
       }
     });
 
-    ws.on("close", () => {
-      cleanup();
-      done();
-    });
+    ws.on("close", () => finish());
 
-    ws.on("error", (err) => {
-      cleanup();
-      if (!signal.aborted) callbacks.onError(err);
-      done();
-    });
+    ws.on("error", (err) => finish(signal.aborted ? undefined : err));
   });
 }
 

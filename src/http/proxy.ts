@@ -1,48 +1,45 @@
 import type { Agent as HttpAgent } from "node:http";
+import { fetch as undiciFetch, ProxyAgent, Socks5ProxyAgent } from "undici";
+import type { Dispatcher } from "undici";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import { SocksProxyAgent } from "socks-proxy-agent";
 
-/**
- * Creates an undici ProxyAgent dispatcher for use with Node's fetch().
- * Returns undefined when no proxy is configured or undici is unavailable.
- */
-export function makeProxyDispatcher(proxy?: string): unknown | undefined {
-  if (!proxy) return undefined;
-  try {
-    // undici ships with Node 18+ — use its ProxyAgent for proxy support
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const undici = require("undici");
-    return new undici.ProxyAgent(proxy);
-  } catch {
-    // undici not available (e.g. older Node, bundled for browser)
-    return undefined;
+type ProxyKind = "http" | "socks";
+
+function proxyKind(proxy: string): ProxyKind {
+  const scheme = new URL(proxy).protocol;
+  if (scheme === "http:" || scheme === "https:") return "http";
+  if (scheme === "socks5:" || scheme === "socks5h:" || scheme === "socks:") return "socks";
+  throw new Error(`unsupported proxy scheme "${scheme}" — use http://, https:// or socks5://`);
+}
+
+const dispatchers = new Map<string, Dispatcher>();
+
+function dispatcherFor(proxy: string): Dispatcher {
+  let d = dispatchers.get(proxy);
+  if (!d) {
+    d = proxyKind(proxy) === "socks" ? new Socks5ProxyAgent(proxy) : new ProxyAgent(proxy);
+    dispatchers.set(proxy, d);
   }
+  return d;
 }
 
 /**
- * Creates an http.Agent for proxying WebSocket connections via the `ws` library.
- * Tries `https-proxy-agent` (user-installed optional dep) first, then `http-proxy-agent`.
- * Returns undefined when no proxy is configured or no proxy agent package is available.
- *
- * Install one of these for WSS proxy support:
- *   npm install https-proxy-agent
- *   npm install http-proxy-agent
+ * `fetch()` routed through `proxy` (HTTP/HTTPS/SOCKS5) when given, plain
+ * global `fetch()` otherwise.
  */
+export async function proxyFetch(
+  url: string,
+  init: { headers?: Record<string, string>; redirect?: "manual" | "follow"; signal?: AbortSignal },
+  proxy?: string,
+): Promise<Response> {
+  if (!proxy) return fetch(url, init);
+  const resp = await undiciFetch(url, { ...init, dispatcher: dispatcherFor(proxy) });
+  return resp as unknown as Response;
+}
+
+/** `http.Agent` that tunnels the WSS connection through `proxy`, or undefined without one. */
 export function makeWssProxyAgent(proxy?: string): HttpAgent | undefined {
   if (!proxy) return undefined;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("https-proxy-agent");
-    const Ctor = mod.HttpsProxyAgent ?? mod.default ?? mod;
-    return new Ctor(proxy);
-  } catch {
-    // https-proxy-agent not installed — try http-proxy-agent
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("http-proxy-agent");
-    const Ctor = mod.HttpProxyAgent ?? mod.default ?? mod;
-    return new Ctor(proxy);
-  } catch {
-    // no proxy agent package available
-    return undefined;
-  }
+  return proxyKind(proxy) === "socks" ? new SocksProxyAgent(proxy) : new HttpsProxyAgent(proxy);
 }

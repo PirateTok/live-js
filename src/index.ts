@@ -3,7 +3,16 @@ export { EventType } from "./events/types.js";
 export type { TikTokEvent, EventTypeName, UnknownEvent } from "./events/types.js";
 export { checkOnline, fetchRoomInfo } from "./http/api.js";
 export type { RoomIdResult, RoomInfo, StreamUrls } from "./http/api.js";
+export { fetchRoomAudience } from "./http/audience.js";
+export type { RoomAudience, AudienceViewer } from "./http/audience.js";
+export { topViewers } from "./events/top-viewers.js";
+export { isComboGift, isStreakOver, diamondTotal } from "./events/gift.js";
+export type { GiftData } from "./events/gift.js";
+export type { Contributor, RoomUserSeqData } from "./events/top-viewers.js";
+export { TtwidMissingError } from "./auth/ttwid.js";
 export {
+  SessionRequiredError,
+  InvalidResponseError,
   UserNotFoundError,
   HostNotOnlineError,
   TikTokBlockedError,

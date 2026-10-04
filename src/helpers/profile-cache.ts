@@ -4,7 +4,7 @@ import {
   ProfileNotFoundError,
   ProfilePrivateError,
 } from "../http/api.js";
-import { scrapeProfile } from "../http/sigi.js";
+import { scrapeProfile, TIKTOK_BASE_URL } from "../http/sigi.js";
 import type { SigiProfile } from "../http/sigi.js";
 
 const DEFAULT_TTL_MS = 300_000; // 5 minutes
@@ -23,17 +23,21 @@ export class ProfileCache {
   private proxy: string | undefined;
   private userAgent: string | undefined;
   private cookies: string;
+  private baseUrl: string;
 
   constructor(opts: {
     ttlMs?: number;
     proxy?: string;
     userAgent?: string;
     cookies?: string;
+    /** TikTok web origin (default `https://www.tiktok.com`). */
+    baseUrl?: string;
   } = {}) {
     this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.proxy = opts.proxy;
     this.userAgent = opts.userAgent;
     this.cookies = opts.cookies ?? "";
+    this.baseUrl = opts.baseUrl ?? TIKTOK_BASE_URL;
   }
 
   async fetch(username: string): Promise<SigiProfile> {
@@ -55,6 +59,7 @@ export class ProfileCache {
         this.userAgent,
         this.cookies,
         this.proxy,
+        this.baseUrl,
       );
       this.entries.set(key, { value: profile, insertedAt: Date.now() });
       return profile;
@@ -89,7 +94,7 @@ export class ProfileCache {
 
   private async ensureTtwid(): Promise<string> {
     if (this.ttwid) return this.ttwid;
-    this.ttwid = await fetchTTWID(TTWID_TIMEOUT_MS, this.userAgent, this.proxy);
+    this.ttwid = await fetchTTWID(TTWID_TIMEOUT_MS, this.userAgent, this.proxy, { url: `${this.baseUrl}/` });
     return this.ttwid;
   }
 }

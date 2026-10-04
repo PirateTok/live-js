@@ -1,8 +1,8 @@
 // Replay test — reads a capture file, processes it through the full decode
 // pipeline, and asserts every value matches the manifest JSON.
 //
-// Skips if testdata is not available. Set PIRATETOK_TESTDATA env var or
-// place captures in ../live-testdata/.
+// Fails if testdata is missing. Captures live in testdata/ (gitignored), or
+// set PIRATETOK_TESTDATA to a live-testdata checkout.
 //
 // Run:  node --test tests/replay_test.mjs
 
@@ -110,12 +110,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 function findTestdataPaths(captureName, manifestName) {
   const candidates = [];
 
+  // PIRATETOK_TESTDATA: a live-testdata checkout (captures/manifests/) or a
+  // local-style dir (manifests/ next to captures/).
   const envDir = process.env.PIRATETOK_TESTDATA;
   if (envDir) {
-    candidates.push({
-      capture: resolve(envDir, "captures", `${captureName}.bin`),
-      manifest: resolve(envDir, "manifests", `${manifestName}.json`),
-    });
+    for (const manifestDir of [["captures", "manifests"], ["manifests"]]) {
+      candidates.push({
+        capture: resolve(envDir, "captures", `${captureName}.bin`),
+        manifest: resolve(envDir, ...manifestDir, `${manifestName}.json`),
+      });
+    }
   }
 
   // testdata/ in repo root
@@ -430,55 +434,32 @@ function assertReplay(name, r, m) {
 
 // --- test runner ---
 
-function runCaptureTestVariant(captureName, manifestName) {
+// Missing testdata is a failure, never a silent pass.
+function runCaptureTestVariant(t, captureName, manifestName) {
   const paths = findTestdataPaths(captureName, manifestName);
-  if (!paths) {
-    console.log(
-      `SKIP ${captureName}: no testdata (set PIRATETOK_TESTDATA or clone live-testdata)`
-    );
-    return;
-  }
+  assert.ok(paths,
+    `${captureName}: no testdata — put captures in testdata/ or set PIRATETOK_TESTDATA to a live-testdata checkout`);
 
   const manifest = JSON.parse(readFileSync(paths.manifest, "utf-8"));
   const frames = readCapture(paths.capture);
+  assert.ok(manifest.frame_count > 0 && manifest.message_count > 0,
+    `${captureName}: manifest is empty`);
+  t.diagnostic(`${paths.capture} (${frames.length} frames) vs ${paths.manifest}`);
   const result = replay(frames);
   assertReplay(captureName, result, manifest);
 }
 
-function runCaptureTest(name) {
-  runCaptureTestVariant(name, name);
-}
-
-function runCaptureTestRaw(name) {
-  runCaptureTestVariant(`${name}_raw`, name);
-}
-
 // --- tests ---
 
+const CAPTURES = ["calvinterest6", "happyhappygaltv", "fox4newsdallasfortworth"];
+
 describe("replay", () => {
-  it("replay_calvinterest6", () => {
-    runCaptureTest("calvinterest6");
-  });
-
-  it("replay_happyhappygaltv", () => {
-    runCaptureTest("happyhappygaltv");
-  });
-
-  it("replay_fox4newsdallasfortworth", () => {
-    runCaptureTest("fox4newsdallasfortworth");
-  });
+  for (const name of CAPTURES) {
+    it(`replay_${name}`, (t) => runCaptureTestVariant(t, name, name));
+  }
 
   // Raw (uncompressed) capture variants — same manifests, gzip stripped from payloads
-
-  it("replay_calvinterest6_raw", () => {
-    runCaptureTestRaw("calvinterest6");
-  });
-
-  it("replay_happyhappygaltv_raw", () => {
-    runCaptureTestRaw("happyhappygaltv");
-  });
-
-  it("replay_fox4newsdallasfortworth_raw", () => {
-    runCaptureTestRaw("fox4newsdallasfortworth");
-  });
+  for (const name of CAPTURES) {
+    it(`replay_${name}_raw`, (t) => runCaptureTestVariant(t, `${name}_raw`, name));
+  }
 });

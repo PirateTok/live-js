@@ -8,6 +8,7 @@ export function buildWssUrl(
   language = "en",
   region = "US",
   compress = true,
+  heartbeatMs = 10_000,
 ): string {
   if (!cdnHost) cdnHost = DEFAULT_CDN_HOST;
 
@@ -40,7 +41,7 @@ export function buildWssUrl(
     identity: "audience",
     history_comment_count: "6",
     last_rtt: lastRtt,
-    heartbeat_duration: "10000",
+    heartbeat_duration: String(heartbeatMs),
     resp_content_type: "protobuf",
     did_rule: "3",
   });

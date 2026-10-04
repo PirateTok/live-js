@@ -1,0 +1,36 @@
+{
+  "status_code": 0,
+  "data": {
+    "total": 57,
+    "anonymous": 12,
+    "ranks": [
+      {
+        "rank": 1,
+        "score": 900,
+        "user": {
+          "id": 7000000000000000001,
+          "id_str": "7000000000000000001",
+          "display_id": "fixture_viewer_one",
+          "nickname": "Fixture One",
+          "sec_uid": "MS4wLjABAAAAfixture1",
+          "avatar_thumb": { "url_list": ["https://p16.example.invalid/one.webp"] },
+          "follow_info": { "follower_count": 321 },
+          "verified": true,
+          "is_follower": true,
+          "is_following": false,
+          "is_subscribe": true
+        }
+      },
+      { "rank": 2, "score": 50 },
+      {
+        "rank": 3,
+        "score": 10,
+        "user": {
+          "id": 4242,
+          "display_id": "fixture_viewer_three",
+          "nickname": "Fixture Three"
+        }
+      }
+    ]
+  }
+}
